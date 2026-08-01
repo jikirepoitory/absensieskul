@@ -21,14 +21,11 @@ interface Siswa {
 export default function PendaftaranKartuPage() {
   const [nama, setNama] = useState<string>("");
   const [kelas, setKelas] = useState<string>("");
-  // 2. Beri tahu TypeScript bahwa studentData bisa berisi objek Siswa atau null
   const [studentData, setStudentData] = useState<Siswa | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // 3. Tentukan tipe ref sebagai HTMLDivElement
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  // 4. Beri tipe FormEvent pada parameter 'e'
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!nama || !kelas) return alert("Harap isi semua kolom!");
@@ -91,26 +88,25 @@ export default function PendaftaranKartuPage() {
             />
           </div>
 
-          {/* KODE BARU */}
-<div>
-  <label className="block text-sm mb-1 text-slate-300 font-medium">
-    Kelas / Jenis Kelas
-  </label>
-  <select
-    required
-    value={kelas}
-    onChange={(e) => setKelas(e.target.value)}
-    className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-  >
-    <option value="">-- Pilih Kelas --</option>
-    <option value="4A">4A</option>
-    <option value="4B">4B</option>
-    <option value="5A">5A</option>
-    <option value="5B">5B</option>
-    <option value="6A">6A</option>
-    <option value="6B">6B</option>
-  </select>
-</div>
+          <div>
+            <label className="block text-sm mb-1 text-slate-300 font-medium">
+              Kelas / Jenis Kelas
+            </label>
+            <select
+              required
+              value={kelas}
+              onChange={(e) => setKelas(e.target.value)}
+              className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            >
+              <option value="">-- Pilih Kelas --</option>
+              <option value="4A">4A</option>
+              <option value="4B">4B</option>
+              <option value="5A">5A</option>
+              <option value="5B">5B</option>
+              <option value="6A">6A</option>
+              <option value="6B">6B</option>
+            </select>
+          </div>
 
           <button
             type="submit"
@@ -134,10 +130,24 @@ export default function PendaftaranKartuPage() {
               </h2>
             </div>
 
-            {/* QR Code membawa ID unik dari Supabase */}
-            <div className="bg-white p-3 rounded-xl shadow-inner">
-              <QRCodeSVG value={studentData.id} size={150} level="H" />
-            </div>
+            {/* 🟢 QR Code dengan Logo Eskul di Tengah */}
+           {/* 🟢 QR Code dengan Logo Menyatu & Lebih Besar */}
+<div className="bg-white p-3 rounded-xl shadow-inner">
+  <QRCodeSVG
+    value={studentData.id}
+    size={160} // Diperbesar sedikit dari 150 ke 160 agar proporsional
+    level="H" 
+    imageSettings={{
+      src: "/logo-eskul.png",
+      x: undefined,
+      y: undefined,
+      height: 65,      // 👈 Ubah jadi 42
+      width: 65,       // 👈 Ubah jadi 42
+      excavate: false, // 👈 Ubah dari true jadi false
+    }}
+  />
+</div>
+
 
             <div className="space-y-1 w-full">
               <p className="font-bold text-lg text-white truncate">
