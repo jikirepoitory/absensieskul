@@ -81,7 +81,7 @@ export default function PendaftaranKartuPage() {
             <input
               type="text"
               required
-              placeholder="Contoh: Muhammad Ziqi"
+              placeholder="nama"
               value={nama}
               onChange={(e) => setNama(e.target.value)}
               className="w-full p-3 bg-slate-800 border border-slate-700 rounded-lg text-yellow-400 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"

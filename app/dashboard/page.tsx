@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Html5QrcodeScanner } from 'html5-qrcode';
 import { supabase } from '@/lib/supabase';
 
 interface DataAbsensi {
@@ -41,8 +40,6 @@ export default function DashboardPage() {
   // State Edit Modal
   const [editingItem, setEditingItem] = useState<DataAbsensi | null>(null);
 
-  const isScanning = useRef(false);
-
   // Protection Guard: Cek session login
   useEffect(() => {
     const savedUser = localStorage.getItem('user_absensi');
@@ -74,31 +71,6 @@ export default function DashboardPage() {
     }
   }, [currentUser]);
 
-  // Scanner WebCam Setup (Aktif untuk semua user)
-  useEffect(() => {
-    if (!currentUser) return;
-
-    const scanner = new Html5QrcodeScanner('reader', { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-
-    scanner.render(
-      async (decodedText) => {
-        if (isScanning.current) return;
-        isScanning.current = true;
-
-        await simpanAbsensi(decodedText, `Siswa (${decodedText})`);
-
-        setTimeout(() => {
-          isScanning.current = false;
-        }, 3000);
-      },
-      () => {}
-    );
-
-    return () => {
-      scanner.clear().catch((err) => console.error(err));
-    };
-  }, [currentUser, kelasSelected]);
-
   // Catat Audit Log ke Supabase
   const logActivity = async (aksi: string, detail: string) => {
     if (!currentUser) return;
@@ -113,7 +85,7 @@ export default function DashboardPage() {
     router.push('/');
   };
 
-  // Simpan Absensi
+  // Simpan Absensi Manual
   const simpanAbsensi = async (nisInput: string, namaInput: string) => {
     setLoading(true);
     setPesan(null);
@@ -208,8 +180,8 @@ export default function DashboardPage() {
         {/* Header Dashboard */}
         <header className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Sistem Absensi Barcode / QR Code</h1>
-            <p className="text-sm text-slate-500">Scan kartu/barcode siswa menggunakan webcam</p>
+            <h1 className="text-2xl font-bold text-slate-900">Sistem Absensi Siswa</h1>
+            <p className="text-sm text-slate-500">Input manual absensi dan manajemen rekap data</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -236,13 +208,13 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Grid Utama (Scan & Riwayat Absensi) - Bisa Diakses Semua User */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Grid Utama (Form Input & Riwayat Absensi) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           
-          {/* Kolom 1: Scanner Webcam & Input Manual */}
+          {/* Kolom 1: Form Input Manual Absensi */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="font-semibold text-lg text-slate-800">1. Pilihan Kelas & Scan</h2>
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h2 className="font-semibold text-lg text-slate-800">1. Pilihan Kelas & Input Absensi</h2>
               <select
                 value={kelasSelected}
                 onChange={(e) => setKelasSelected(e.target.value)}
@@ -257,34 +229,45 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div id="reader" className="overflow-hidden rounded-lg border border-slate-200"></div>
-
-            <div className="pt-4 border-t border-slate-200">
-              <h3 className="text-sm font-medium text-slate-600 mb-2">Input Manual:</h3>
-              <form onSubmit={(e) => { e.preventDefault(); if (nis && namaSiswa) simpanAbsensi(nis, namaSiswa); }} className="space-y-3">
+            <form 
+              onSubmit={(e) => { 
+                e.preventDefault(); 
+                if (nis && namaSiswa) simpanAbsensi(nis, namaSiswa); 
+              }} 
+              className="space-y-4 pt-2"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">NIS Siswa</label>
                 <input
                   type="text"
-                  placeholder="NIS Siswa"
+                  placeholder="Masukkan NIS Siswa"
                   value={nis}
                   onChange={(e) => setNis(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Siswa</label>
                 <input
                   type="text"
-                  placeholder="Nama Siswa"
+                  placeholder="Masukkan Nama Siswa"
                   value={namaSiswa}
                   onChange={(e) => setNamaSiswa(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm transition"
-                >
-                  {loading ? 'Menyimpan...' : 'Simpan Absensi'}
-                </button>
-              </form>
-            </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50 shadow-sm"
+              >
+                {loading ? 'Menyimpan...' : 'Simpan Absensi'}
+              </button>
+            </form>
           </div>
 
           {/* Kolom 2: Riwayat Absensi Hari Ini */}
@@ -317,9 +300,11 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="flex-1 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
+{/* SESUDAH */}
+<div className="flex-1 overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-lg">
+  <table className="w-full text-left text-sm">
+    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
+                
                   <tr>
                     <th className="p-2">Waktu</th>
                     <th className="p-2">Siswa</th>
@@ -375,9 +360,10 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
               <span>🔍 Log Aktivitas Petugas (Audit Control)</span>
             </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600">
+          {/* SESUDAH */}
+<div className="overflow-x-auto max-h-60 overflow-y-auto border border-slate-100 rounded-lg">
+  <table className="w-full text-left text-xs">
+    <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
                   <tr>
                     <th className="p-2.5">Waktu</th>
                     <th className="p-2.5">User/Petugas</th>
