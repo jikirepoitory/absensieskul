@@ -7,7 +7,8 @@ import { supabase } from '@/lib/supabase';
 interface DataAbsensi {
   id: number;
   created_at: string;
-  nis: string;
+  nis?: string;
+  nisn: string;
   nama_siswa: string;
   kelas: string;
   status: string;
@@ -30,7 +31,7 @@ export default function DashboardPage() {
   // State App
   const [kelasSelected, setKelasSelected] = useState<string>('4A');
   const [filterKelas, setFilterKelas] = useState<string>('SEMUA');
-  const [nis, setNis] = useState<string>('');
+  const [nisn, setNisn] = useState<string>('');
   const [namaSiswa, setNamaSiswa] = useState<string>('');
   const [listAbsensi, setListAbsensi] = useState<DataAbsensi[]>([]);
   const [listLogs, setListLogs] = useState<AuditLog[]>([]);
@@ -86,12 +87,12 @@ export default function DashboardPage() {
   };
 
   // Simpan Absensi Manual
-  const simpanAbsensi = async (nisInput: string, namaInput: string) => {
+  const simpanAbsensi = async (nisnInput: string, namaInput: string) => {
     setLoading(true);
     setPesan(null);
 
     const { error } = await supabase.from('absensi').insert([
-      { nis: nisInput, nama_siswa: namaInput, kelas: kelasSelected, status: 'Hadir' },
+      { nisn: nisnInput, nama_siswa: namaInput, kelas: kelasSelected, status: 'Hadir' },
     ]);
 
     setLoading(false);
@@ -99,9 +100,9 @@ export default function DashboardPage() {
     if (error) {
       setPesan({ tipe: 'error', teks: 'Gagal mencatat absensi: ' + error.message });
     } else {
-      setPesan({ tipe: 'success', teks: `Berhasil absensi NIS: ${nisInput} (${kelasSelected})` });
-      await logActivity('ADD_ABSEN', `Menambahkan absensi NIS: ${nisInput}, Nama: ${namaInput}, Kelas: ${kelasSelected}`);
-      setNis('');
+      setPesan({ tipe: 'success', teks: `Berhasil absensi NISN: ${nisnInput} (${kelasSelected})` });
+      await logActivity('ADD_ABSEN', `Menambahkan absensi NISN: ${nisnInput}, Nama: ${namaInput}, Kelas: ${kelasSelected}`);
+      setNisn('');
       setNamaSiswa('');
       fetchAbsensi();
     }
@@ -109,14 +110,15 @@ export default function DashboardPage() {
 
   // Hapus Data Absensi
   const handleHapus = async (item: DataAbsensi) => {
-    if (!confirm(`Yakin ingin menghapus absensi ${item.nama_siswa} (${item.nis})?`)) return;
+    const displayIdentifier = item.nisn || item.nis || '-';
+    if (!confirm(`Yakin ingin menghapus absensi ${item.nama_siswa} (${displayIdentifier})?`)) return;
 
     const { error } = await supabase.from('absensi').delete().eq('id', item.id);
 
     if (error) {
       alert('Gagal menghapus: ' + error.message);
     } else {
-      await logActivity('DELETE', `Menghapus data absensi ID ${item.id} (${item.nama_siswa} - NIS: ${item.nis})`);
+      await logActivity('DELETE', `Menghapus data absensi ID ${item.id} (${item.nama_siswa} - NISN: ${displayIdentifier})`);
       fetchAbsensi();
     }
   };
@@ -128,13 +130,13 @@ export default function DashboardPage() {
 
     const { error } = await supabase
       .from('absensi')
-      .update({ nama_siswa: editingItem.nama_siswa, nis: editingItem.nis, kelas: editingItem.kelas })
+      .update({ nama_siswa: editingItem.nama_siswa, nisn: editingItem.nisn, kelas: editingItem.kelas })
       .eq('id', editingItem.id);
 
     if (error) {
       alert('Gagal update data: ' + error.message);
     } else {
-      await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NIS: ${editingItem.nis}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}`);
+      await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NISN: ${editingItem.nisn}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}`);
       setEditingItem(null);
       fetchAbsensi();
     }
@@ -152,9 +154,9 @@ export default function DashboardPage() {
 
     const sortedData = [...listAbsensi].sort((a, b) => a.kelas.localeCompare(b.kelas));
 
-    const headers = ['ID,Waktu,NIS,Nama Siswa,Kelas,Status\n'];
+    const headers = ['ID,Waktu,NISN,Nama Siswa,Kelas,Status\n'];
     const rows = sortedData.map(
-      (item) => `${item.id},"${new Date(item.created_at).toLocaleString('id-ID')}","${item.nis}","${item.nama_siswa}","${item.kelas}","${item.status}"\n`
+      (item) => `${item.id},"${new Date(item.created_at).toLocaleString('id-ID')}","${item.nisn || item.nis || '-'}","${item.nama_siswa}","${item.kelas}","${item.status}"\n`
     );
 
     const blob = new Blob([...headers, ...rows], { type: 'text/csv;charset=utf-8;' });
@@ -232,17 +234,17 @@ export default function DashboardPage() {
             <form 
               onSubmit={(e) => { 
                 e.preventDefault(); 
-                if (nis && namaSiswa) simpanAbsensi(nis, namaSiswa); 
+                if (nisn && namaSiswa) simpanAbsensi(nisn, namaSiswa); 
               }} 
               className="space-y-4 pt-2"
             >
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">NIS Siswa</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">NISN Siswa</label>
                 <input
                   type="text"
-                  placeholder="Masukkan NIS Siswa"
-                  value={nis}
-                  onChange={(e) => setNis(e.target.value)}
+                  placeholder="Masukkan NISN Siswa"
+                  value={nisn}
+                  onChange={(e) => setNisn(e.target.value)}
                   className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -300,11 +302,9 @@ export default function DashboardPage() {
               </select>
             </div>
 
-{/* SESUDAH */}
-<div className="flex-1 overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-lg">
-  <table className="w-full text-left text-sm">
-    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
-                
+            <div className="flex-1 overflow-x-auto max-h-80 overflow-y-auto border border-slate-100 rounded-lg">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
                   <tr>
                     <th className="p-2">Waktu</th>
                     <th className="p-2">Siswa</th>
@@ -327,7 +327,9 @@ export default function DashboardPage() {
                         </td>
                         <td className="p-2">
                           <div className="font-medium text-slate-800">{item.nama_siswa}</div>
-                          <div className="text-xs text-slate-400">{item.nis}</div>
+                          <div className="text-xs text-slate-400">
+                            NISN: {item.nisn || item.nis || '-'}
+                          </div>
                         </td>
                         <td className="p-2 font-semibold text-slate-700">{item.kelas}</td>
                         <td className="p-2 text-center space-x-1">
@@ -360,10 +362,9 @@ export default function DashboardPage() {
             <h2 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
               <span>🔍 Log Aktivitas Petugas (Audit Control)</span>
             </h2>
-          {/* SESUDAH */}
-<div className="overflow-x-auto max-h-60 overflow-y-auto border border-slate-100 rounded-lg">
-  <table className="w-full text-left text-xs">
-    <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
+            <div className="overflow-x-auto max-h-60 overflow-y-auto border border-slate-100 rounded-lg">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
                   <tr>
                     <th className="p-2.5">Waktu</th>
                     <th className="p-2.5">User/Petugas</th>
@@ -412,11 +413,11 @@ export default function DashboardPage() {
             <h3 className="font-bold text-lg text-slate-800">Edit Data Absensi</h3>
             <form onSubmit={handleUpdate} className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-600 block mb-1">NIS</label>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">NISN</label>
                 <input
                   type="text"
-                  value={editingItem.nis}
-                  onChange={(e) => setEditingItem({ ...editingItem, nis: e.target.value })}
+                  value={editingItem.nisn || editingItem.nis || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, nisn: e.target.value })}
                   className="w-full p-2 border border-slate-300 rounded-lg text-sm"
                   required
                 />
