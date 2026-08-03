@@ -3,8 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-// 🌟 PENAMBAHAN 1: Import komponen ListAbsensi
 import ListAbsensi from './components/ListAbsensi';
+
+interface Siswa {
+  id: string;
+  nisn: string;
+  nama: string;
+  kelas: string;
+}
 
 interface DataAbsensi {
   id: number;
@@ -30,20 +36,23 @@ export default function DashboardPage() {
   // State User Login
   const [currentUser, setCurrentUser] = useState<string | null>(null);
 
-  // State App
-  const [kelasSelected, setKelasSelected] = useState<string>('4A');
+  // State Master Data Siswa & Kelas
+  const [kelasList, setKelasList] = useState<string[]>([]);
+  const [kelasSelected, setKelasSelected] = useState<string>('');
+  const [siswaList, setSiswaList] = useState<Siswa[]>([]);
+  const [selectedSiswaId, setSelectedSiswaId] = useState<string>('');
+  const [tanggalAbsen, setTanggalAbsen] = useState<string>(''); // Tambahan tanggal custom
+
+  // State App & Logs
   const [filterKelas, setFilterKelas] = useState<string>('SEMUA');
-  const [nisn, setNisn] = useState<string>('');
-  const [namaSiswa, setNamaSiswa] = useState<string>('');
   const [listAbsensi, setListAbsensi] = useState<DataAbsensi[]>([]);
   const [listLogs, setListLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingKelas, setLoadingKelas] = useState<boolean>(true);
+  const [loadingSiswa, setLoadingSiswa] = useState<boolean>(false);
   const [pesan, setPesan] = useState<{ tipe: 'success' | 'error'; teks: string } | null>(null);
 
-  // 🌟 PENAMBAHAN 2: State refreshTrigger untuk mentrigger auto-update pada ListAbsensi
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
-
-  // State Edit Modal
   const [editingItem, setEditingItem] = useState<DataAbsensi | null>(null);
 
   // Protection Guard: Cek session login
@@ -56,13 +65,56 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  // Fetch Data Absensi (Untuk Semua User)
+  // 1. Fetch Daftar Kelas Unik dari Tabel Siswa
+  useEffect(() => {
+    const fetchKelas = async () => {
+      setLoadingKelas(true);
+      const { data, error } = await supabase.from('siswa').select('kelas');
+
+      if (!error && data) {
+        const uniqueKelas = Array.from(
+          new Set(data.map((item) => item.kelas).filter(Boolean))
+        ).sort();
+        setKelasList(uniqueKelas as string[]);
+      }
+      setLoadingKelas(false);
+    };
+
+    fetchKelas();
+  }, []);
+
+  // 2. Fetch Daftar Siswa berdasarkan Kelas yang dipilih
+  useEffect(() => {
+    if (!kelasSelected) {
+      setSiswaList([]);
+      setSelectedSiswaId('');
+      return;
+    }
+
+    const fetchSiswa = async () => {
+      setLoadingSiswa(true);
+      const { data, error } = await supabase
+        .from('siswa')
+        .select('*')
+        .eq('kelas', kelasSelected)
+        .order('nama', { ascending: true });
+
+      if (!error && data) {
+        setSiswaList(data as Siswa[]);
+      }
+      setLoadingSiswa(false);
+    };
+
+    fetchSiswa();
+  }, [kelasSelected]);
+
+  // Fetch Data Absensi
   const fetchAbsensi = async () => {
     const { data } = await supabase.from('absensi').select('*').order('created_at', { ascending: false });
     if (data) setListAbsensi(data);
   };
 
-  // Fetch Audit Logs (Hanya jika bukan Ilham)
+  // Fetch Audit Logs
   const fetchLogs = async () => {
     const { data } = await supabase.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20);
     if (data) setListLogs(data);
@@ -92,26 +144,57 @@ export default function DashboardPage() {
   };
 
   // Simpan Absensi Manual
-  const simpanAbsensi = async (nisnInput: string, namaInput: string) => {
+  const simpanAbsensi = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSiswaId) return alert('Silakan pilih nama siswa!');
+
+    const targetSiswa = siswaList.find((s) => s.id === selectedSiswaId);
+    if (!targetSiswa) return;
+
     setLoading(true);
     setPesan(null);
 
-    const { error } = await supabase.from('absensi').insert([
-      { nisn: nisnInput, nama_siswa: namaInput, kelas: kelasSelected, status: 'Hadir' },
-    ]);
+    // Menyiapkan payload insert
+    const insertData: any = {
+      nisn: targetSiswa.nisn || '',
+      nama_siswa: targetSiswa.nama,
+      kelas: kelasSelected,
+      status: 'Hadir',
+    };
+
+    // Jika user memilih tanggal khusus (Manual Absen Backdate/Future)
+    if (tanggalAbsen) {
+      const selectedDate = new Date(tanggalAbsen);
+      const now = new Date();
+      selectedDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+      insertData.created_at = selectedDate.toISOString();
+    }
+
+    const { error } = await supabase.from('absensi').insert([insertData]);
 
     setLoading(false);
 
     if (error) {
       setPesan({ tipe: 'error', teks: 'Gagal mencatat absensi: ' + error.message });
     } else {
-      setPesan({ tipe: 'success', teks: `Berhasil absensi NISN: ${nisnInput} (${kelasSelected})` });
-      await logActivity('ADD_ABSEN', `Menambahkan absensi NISN: ${nisnInput}, Nama: ${namaInput}, Kelas: ${kelasSelected}`);
-      setNisn('');
-      setNamaSiswa('');
+      setPesan({
+        tipe: 'success',
+        teks: `Berhasil absensi: ${targetSiswa.nama} (${kelasSelected}) ${
+          tanggalAbsen ? `pada tanggal ${tanggalAbsen}` : ''
+        }`,
+      });
+
+      await logActivity(
+        'ADD_ABSEN',
+        `Menambahkan absensi NISN: ${targetSiswa.nisn}, Nama: ${targetSiswa.nama}, Kelas: ${kelasSelected} ${
+          tanggalAbsen ? `(Manual Tanggal: ${tanggalAbsen})` : ''
+        }`
+      );
+
+      // Reset Form Siswa & Tanggal
+      setSelectedSiswaId('');
+      setTanggalAbsen('');
       fetchAbsensi();
-      
-      // 🌟 PENAMBAHAN 3: Trigger update otomatis ke tabel ListAbsensi
       setRefreshTrigger((prev) => prev + 1);
     }
   };
@@ -128,8 +211,6 @@ export default function DashboardPage() {
     } else {
       await logActivity('DELETE', `Menghapus data absensi ID ${item.id} (${item.nama_siswa} - NISN: ${displayIdentifier})`);
       fetchAbsensi();
-
-      // 🌟 PENAMBAHAN 4: Trigger update otomatis ke tabel ListAbsensi
       setRefreshTrigger((prev) => prev + 1);
     }
   };
@@ -150,24 +231,21 @@ export default function DashboardPage() {
       await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NISN: ${editingItem.nisn}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}`);
       setEditingItem(null);
       fetchAbsensi();
-
-      // 🌟 PENAMBAHAN 5: Trigger update otomatis ke tabel ListAbsensi
       setRefreshTrigger((prev) => prev + 1);
     }
   };
 
-  // Filter Data Absensi untuk Tampilan Tabel
+  // Filter Data Absensi
   const filteredAbsensi = listAbsensi.filter((item) => {
     if (filterKelas === 'SEMUA') return true;
     return item.kelas === filterKelas;
   });
 
-  // Download Data sebagai CSV
+  // Download Data CSV
   const handleDownloadCSV = async () => {
     if (listAbsensi.length === 0) return alert('Tidak ada data untuk di-download');
 
     const sortedData = [...listAbsensi].sort((a, b) => a.kelas.localeCompare(b.kelas));
-
     const headers = ['ID,Waktu,NISN,Nama Siswa,Kelas,Status\n'];
     const rows = sortedData.map(
       (item) => `${item.id},"${new Date(item.created_at).toLocaleString('id-ID')}","${item.nisn || item.nis || '-'}","${item.nama_siswa}","${item.kelas}","${item.status}"\n`
@@ -227,59 +305,85 @@ export default function DashboardPage() {
         {/* Grid Utama (Form Input & Riwayat Absensi) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
           
-          {/* Kolom 1: Form Input Manual Absensi */}
+          {/* Kolom 1: Form Input Manual Absensi (Pilih Kelas & Siswa) */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h2 className="font-semibold text-lg text-slate-800">1. Pilihan Kelas & Input Absensi</h2>
-              <select
-                value={kelasSelected}
-                onChange={(e) => setKelasSelected(e.target.value)}
-                className="p-2 border border-slate-300 rounded-lg text-sm font-semibold bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="4A">Kelas 4A</option>
-                <option value="4B">Kelas 4B</option>
-                <option value="5A">Kelas 5A</option>
-                <option value="5B">Kelas 5B</option>
-                <option value="6A">Kelas 6A</option>
-                <option value="6B">Kelas 6B</option>
-              </select>
-            </div>
+            <h2 className="font-semibold text-lg text-slate-800 pb-2 border-b border-slate-100">
+              1. Absensi Manual 
+            </h2>
 
-            <form 
-              onSubmit={(e) => { 
-                e.preventDefault(); 
-                if (nisn && namaSiswa) simpanAbsensi(nisn, namaSiswa); 
-              }} 
-              className="space-y-4 pt-2"
-            >
+            <form onSubmit={simpanAbsensi} className="space-y-4 pt-1">
+              {/* Dropdown Pilih Kelas */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">NISN Siswa</label>
-                <input
-                  type="text"
-                  placeholder="Masukkan NISN Siswa"
-                  value={nisn}
-                  onChange={(e) => setNisn(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Pilih Kelas
+                </label>
+                <select
                   required
-                />
+                  value={kelasSelected}
+                  onChange={(e) => {
+                    setKelasSelected(e.target.value);
+                    setSelectedSiswaId('');
+                  }}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm font-semibold bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-800"
+                >
+                  <option value="">
+                    {loadingKelas ? '-- Memuat Kelas... --' : '-- Pilih Kelas --'}
+                  </option>
+                  {kelasList.map((kls) => (
+                    <option key={kls} value={kls}>
+                      Kelas {kls}
+                    </option>
+                  ))}
+                </select>
               </div>
 
+              {/* Dropdown Pilih Nama Siswa */}
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Nama Siswa</label>
-                <input
-                  type="text"
-                  placeholder="Masukkan Nama Siswa"
-                  value={namaSiswa}
-                  onChange={(e) => setNamaSiswa(e.target.value)}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Pilih Nama Siswa
+                </label>
+                <select
                   required
+                  disabled={!kelasSelected || loadingSiswa}
+                  value={selectedSiswaId}
+                  onChange={(e) => setSelectedSiswaId(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 text-slate-800"
+                >
+                  <option value="">
+                    {!kelasSelected
+                      ? '-- Pilih Kelas Terlebih Dahulu --'
+                      : loadingSiswa
+                      ? '-- Memuat Siswa... --'
+                      : '-- Pilih Nama Siswa --'}
+                  </option>
+                  {siswaList.map((siswa) => (
+                    <option key={siswa.id} value={siswa.id}>
+                      {siswa.nama} (NISN: {siswa.nisn || '-'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Input Tanggal (Opsional untuk Absen Manual Hari Lain) */}
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Pilih Tanggal Absen (Opsional / Manual Date)
+                </label>
+                <input
+                  type="date"
+                  value={tanggalAbsen}
+                  onChange={(e) => setTanggalAbsen(e.target.value)}
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
                 />
+                <span className="text-[11px] text-slate-400 block mt-1">
+                  *Kosongkan jika ingin mencatat absensi untuk hari ini (realtime).
+                </span>
               </div>
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50 shadow-sm"
+                disabled={loading || !selectedSiswaId}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition disabled:opacity-50 shadow-sm mt-2"
               >
                 {loading ? 'Menyimpan...' : 'Simpan Absensi'}
               </button>
@@ -289,7 +393,7 @@ export default function DashboardPage() {
           {/* Kolom 2: Riwayat Absensi Hari Ini */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex flex-col space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-              <h2 className="font-semibold text-lg text-slate-800">2. Riwayat Absensi Hari Ini</h2>
+              <h2 className="font-semibold text-lg text-slate-800">2. Riwayat Absensi</h2>
               <button
                 onClick={handleDownloadCSV}
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition"
@@ -307,12 +411,11 @@ export default function DashboardPage() {
                 className="p-1.5 border border-slate-300 rounded text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1"
               >
                 <option value="SEMUA">Semua Kelas</option>
-                <option value="4A">Kelas 4A</option>
-                <option value="4B">Kelas 4B</option>
-                <option value="5A">Kelas 5A</option>
-                <option value="5B">Kelas 5B</option>
-                <option value="6A">Kelas 6A</option>
-                <option value="6B">Kelas 6B</option>
+                {kelasList.map((kls) => (
+                  <option key={kls} value={kls}>
+                    Kelas {kls}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -320,7 +423,7 @@ export default function DashboardPage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 sticky top-0 z-10">
                   <tr>
-                    <th className="p-2">Waktu</th>
+                    <th className="p-2">Waktu / Tgl</th>
                     <th className="p-2">Siswa</th>
                     <th className="p-2">Kelas</th>
                     <th className="p-2 text-center">Aksi</th>
@@ -337,7 +440,14 @@ export default function DashboardPage() {
                     filteredAbsensi.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="p-2 text-xs text-slate-500">
-                          {new Date(item.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(item.created_at).toLocaleDateString('id-ID', {
+                            day: '2-digit',
+                            month: 'short',
+                          })}{' '}
+                          {new Date(item.created_at).toLocaleTimeString('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </td>
                         <td className="p-2">
                           <div className="font-medium text-slate-800">{item.nama_siswa}</div>
@@ -370,10 +480,10 @@ export default function DashboardPage() {
 
         </div>
 
-        {/* 🌟 PENAMBAHAN 6: Panggilan Komponen Section 3 (List Absensi Per Kelas) */}
+        {/* Section 3: List Absensi Per Kelas */}
         <ListAbsensi refreshTrigger={refreshTrigger} />
 
-        {/* Log Aktivitas Petugas (Audit Control) - Sembunyi khusus untuk user 'ilham' */}
+        {/* Log Aktivitas Petugas (Audit Control) */}
         {!isIlham && (
           <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 space-y-3">
             <h2 className="font-semibold text-lg text-slate-800 flex items-center gap-2">
@@ -456,12 +566,11 @@ export default function DashboardPage() {
                   onChange={(e) => setEditingItem({ ...editingItem, kelas: e.target.value })}
                   className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-50"
                 >
-                  <option value="4A">Kelas 4A</option>
-                  <option value="4B">Kelas 4B</option>
-                  <option value="5A">Kelas 5A</option>
-                  <option value="5B">Kelas 5B</option>
-                  <option value="6A">Kelas 6A</option>
-                  <option value="6B">Kelas 6B</option>
+                  {kelasList.map((kls) => (
+                    <option key={kls} value={kls}>
+                      Kelas {kls}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">
