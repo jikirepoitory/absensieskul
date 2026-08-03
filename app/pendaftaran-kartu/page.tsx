@@ -39,7 +39,6 @@ export default function PendaftaranKartuPage() {
       if (error) {
         console.error("Gagal mengambil data kelas:", error.message);
       } else if (data) {
-        // Ambil kelas unik dan urutkan
         const uniqueKelas = Array.from(
           new Set(data.map((item) => item.kelas).filter(Boolean))
         ).sort();
@@ -182,71 +181,71 @@ export default function PendaftaranKartuPage() {
         <div className="flex flex-col items-center gap-6">
           <div
             ref={cardRef}
-            className="relative w-[320px] h-[508px] p-5 bg-[#0d1322] border-2 border-[#F4D35E] rounded-2xl shadow-[0_0_35px_rgba(82,94,167,0.45)] flex flex-col items-center justify-between text-center overflow-hidden"
+            className="relative w-[320px] h-[508px] p-5 bg-white border-2 border-[#2563EB] rounded-2xl shadow-[0_10px_35px_rgba(37,99,235,0.25)] flex flex-col items-center justify-between text-center overflow-hidden"
           >
-            {/* Layer Background Pattern / Vector Tech Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-br from-[#131b2e] via-[#0d1322] to-[#18233c] pointer-events-none" />
+            {/* Layer Background Pattern - terang biru ke kuning lembut */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#EAF4FF] via-white to-[#FFFBEA] pointer-events-none" />
 
             {/* Pattern Mesh SVG */}
             <svg
-              className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"
+              className="absolute inset-0 w-full h-full opacity-10 pointer-events-none"
               xmlns="http://www.w3.org/2000/svg"
               width="100%"
               height="100%"
             >
               <defs>
                 <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
-                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#5FACD3" strokeWidth="0.8" />
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#2563EB" strokeWidth="0.8" />
                 </pattern>
               </defs>
               <rect width="100%" height="100%" fill="url(#grid)" />
             </svg>
 
             {/* Aksen Background Glow */}
-            <div className="absolute -top-12 -right-12 w-40 h-40 bg-[#5FACD3]/20 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-[#525EA7]/30 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -top-12 -right-12 w-40 h-40 bg-[#FACC15]/30 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-12 w-40 h-40 bg-[#3B82F6]/20 rounded-full blur-3xl pointer-events-none" />
 
             {/* Corner Bracket Decorators */}
-            <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-[#FFF449] pointer-events-none" />
-            <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-[#FFF449] pointer-events-none" />
-            <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-[#FFF449] pointer-events-none" />
-            <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-[#FFF449] pointer-events-none" />
+            <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-[#FACC15] pointer-events-none" />
+            <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-[#FACC15] pointer-events-none" />
+            <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-[#FACC15] pointer-events-none" />
+            <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-[#FACC15] pointer-events-none" />
 
             {/* 1. HEADER JUDUL */}
             <div className="w-full pt-1 z-10">
-              <h2 className="font-black text-lg text-[#FFF449] tracking-widest leading-tight uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
+              <h2 className="font-black text-lg text-[#1D4ED8] tracking-widest leading-tight uppercase drop-shadow-sm">
                 KARTU ABSENSI
               </h2>
-              <div className="mt-1 mx-auto w-fit bg-[#525EA7]/40 border border-[#5FACD3]/50 px-3 py-0.5 rounded-full backdrop-blur-sm">
-                <p className="text-[10px] font-extrabold text-[#5FACD3] tracking-widest uppercase">
+              <div className="mt-1 mx-auto w-fit bg-[#2563EB] border border-[#FACC15]/60 px-3 py-0.5 rounded-full shadow-sm">
+                <p className="text-[10px] font-extrabold text-[#FFF449] tracking-widest uppercase">
                   EKSTRAKULIKULER KOMPUTER
                 </p>
               </div>
             </div>
 
-            {/* 2. NAMA & KELAS */}
-            <div className="w-full bg-[#131b2e]/85 border border-[#525EA7]/50 rounded-xl py-2 px-3 shadow-md z-10 backdrop-blur-md space-y-0.5">
-              <p className="font-black text-lg text-white truncate leading-snug tracking-wide">
+            {/* 2. NAMA & KELAS (Dapat turun otomatis ke baris bawah jika nama panjang) */}
+            <div className="w-full bg-[#F0F7FF] border border-[#2563EB]/30 rounded-xl py-2 px-3 shadow-sm z-10 flex flex-col items-center justify-center min-h-[64px]">
+              <p className="font-black text-sm sm:text-base text-[#0F172A] leading-tight tracking-wide text-center break-words whitespace-normal max-w-full">
                 {studentData.nama}
               </p>
-              <p className="text-xs font-extrabold text-[#F4D35E] tracking-wider">
+              <p className="text-xs font-extrabold text-[#B45309] tracking-wider mt-1">
                 KELAS: {studentData.kelas}
               </p>
             </div>
 
-            {/* 3. QR CODE */}
+            {/* 3. QR CODE - TIDAK DIUBAH */}
             <div className="relative p-1.5 rounded-2xl bg-gradient-to-tr from-[#525EA7] via-[#5FACD3] to-[#F4D35E] shadow-[0_8px_20px_rgba(0,0,0,0.6)] z-10">
               <div className="bg-white p-2.5 rounded-[12px]">
                 <QRCodeSVG
                   value={studentData.id}
-                  size={145}
+                  size={140}
                   level="H"
                   imageSettings={{
                     src: "/logo-eskul.png",
                     x: undefined,
                     y: undefined,
-                    height: 65,
-                    width: 65,
+                    height: 60,
+                    width: 60,
                     excavate: false,
                   }}
                 />
@@ -255,11 +254,11 @@ export default function PendaftaranKartuPage() {
 
             {/* 4. NISN */}
             <div className="w-full z-10 pb-1">
-              <div className="bg-[#090d16]/90 border border-[#525EA7]/60 rounded-lg py-1.5 px-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase font-bold text-[#5FACD3] tracking-wider">
+              <div className="bg-[#FFFBEA] border border-[#FACC15]/60 rounded-lg py-1.5 px-3">
+                <p className="text-[10px] uppercase font-bold text-[#B45309] tracking-wider">
                   NISN
                 </p>
-                <p className="text-xs font-mono font-bold text-white break-all leading-tight mt-0.5">
+                <p className="text-xs font-mono font-bold text-[#0F172A] break-all leading-tight mt-0.5">
                   {studentData.nisn || "-"}
                 </p>
               </div>
