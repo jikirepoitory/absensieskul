@@ -1,16 +1,14 @@
 "use client";
-import { useState, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { QRCodeSVG } from "qrcode.react";
 import { toPng } from "html-to-image";
 
-// Inisialisasi Supabase Client dari Environment Variable
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-// Tipe data untuk Siswa
 interface Siswa {
   id: string;
   nisn: string;
@@ -20,32 +18,75 @@ interface Siswa {
 }
 
 export default function PendaftaranKartuPage() {
-  const [nisn, setNisn] = useState<string>("");
-  const [nama, setNama] = useState<string>("");
-  const [kelas, setKelas] = useState<string>("");
+  const [kelasList, setKelasList] = useState<string[]>([]);
+  const [selectedKelas, setSelectedKelas] = useState<string>("");
+
+  const [siswaList, setSiswaList] = useState<Siswa[]>([]);
+  const [selectedSiswaId, setSelectedSiswaId] = useState<string>("");
+
   const [studentData, setStudentData] = useState<Siswa | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loadingKelas, setLoadingKelas] = useState<boolean>(true);
+  const [loadingSiswa, setLoadingSiswa] = useState<boolean>(false);
 
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!nisn || !nama || !kelas) return alert("Harap isi semua kolom!");
+  // 1. Ambil daftar kelas unik saat halaman dibuka
+  useEffect(() => {
+    const fetchKelas = async () => {
+      setLoadingKelas(true);
+      const { data, error } = await supabase.from("siswa").select("kelas");
 
-    setLoading(true);
+      if (error) {
+        console.error("Gagal mengambil data kelas:", error.message);
+      } else if (data) {
+        // Ambil kelas unik dan urutkan
+        const uniqueKelas = Array.from(
+          new Set(data.map((item) => item.kelas).filter(Boolean))
+        ).sort();
+        setKelasList(uniqueKelas as string[]);
+      }
+      setLoadingKelas(false);
+    };
 
-    const { data, error } = await supabase
-      .from("siswa")
-      .insert([{ nisn, nama, kelas }])
-      .select()
-      .single();
+    fetchKelas();
+  }, []);
 
-    if (error) {
-      alert("Gagal menyimpan data: " + error.message);
-    } else {
-      setStudentData(data as Siswa);
+  // 2. Ambil daftar siswa berdasarkan kelas yang dipilih
+  useEffect(() => {
+    if (!selectedKelas) {
+      setSiswaList([]);
+      setSelectedSiswaId("");
+      return;
     }
-    setLoading(false);
+
+    const fetchSiswa = async () => {
+      setLoadingSiswa(true);
+      const { data, error } = await supabase
+        .from("siswa")
+        .select("*")
+        .eq("kelas", selectedKelas)
+        .order("nama", { ascending: true });
+
+      if (error) {
+        console.error("Gagal mengambil data siswa:", error.message);
+      } else if (data) {
+        setSiswaList(data as Siswa[]);
+      }
+      setLoadingSiswa(false);
+    };
+
+    fetchSiswa();
+  }, [selectedKelas]);
+
+  // Handle pembuatan kartu (hanya set state UI lokal, 0 hit database POST/INSERT)
+  const handleGenerateCard = (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedSiswaId) return alert("Pilih siswa terlebih dahulu!");
+
+    const foundSiswa = siswaList.find((s) => s.id === selectedSiswaId);
+    if (foundSiswa) {
+      setStudentData(foundSiswa);
+    }
   };
 
   // Download Kartu sebagai Gambar PNG
@@ -67,82 +108,85 @@ export default function PendaftaranKartuPage() {
   return (
     <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col items-center justify-center p-4 font-sans">
       <h1 className="text-2xl font-bold text-[#FFF449] mb-6 text-center">
-        Pendaftaran & Pembuatan Kartu Siswa
+        Pencetakan Kartu Absensi Siswa
       </h1>
 
       {!studentData ? (
-        /* Form Isian */
+        /* Form Pemilihan Kelas & Siswa */
         <form
-          onSubmit={handleSubmit}
+          onSubmit={handleGenerateCard}
           className="w-full max-w-md bg-[#131b2e] p-6 rounded-xl border border-[#525EA7]/40 space-y-4 shadow-xl"
         >
+          {/* Dropdown Pilih Kelas */}
           <div>
             <label className="block text-sm mb-1 text-slate-300 font-medium">
-              NISN Siswa
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="Masukkan NISN"
-              value={nisn}
-              onChange={(e) => setNisn(e.target.value)}
-              className="w-full p-3 bg-[#0d1322] border border-[#525EA7]/60 rounded-lg text-[#FFF449] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#5FACD3]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm mb-1 text-slate-300 font-medium">
-              Nama Lengkap Siswa
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="Masukkan nama lengkap"
-              value={nama}
-              onChange={(e) => setNama(e.target.value)}
-              className="w-full p-3 bg-[#0d1322] border border-[#525EA7]/60 rounded-lg text-[#FFF449] placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#5FACD3]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm mb-1 text-slate-300 font-medium">
-              Kelas / Jenis Kelas
+              Pilih Kelas
             </label>
             <select
               required
-              value={kelas}
-              onChange={(e) => setKelas(e.target.value)}
+              value={selectedKelas}
+              onChange={(e) => {
+                setSelectedKelas(e.target.value);
+                setSelectedSiswaId("");
+              }}
               className="w-full p-3 bg-[#0d1322] border border-[#525EA7]/60 rounded-lg text-[#FFF449] focus:outline-none focus:ring-2 focus:ring-[#5FACD3]"
             >
-              <option value="">-- Pilih Kelas --</option>
-              <option value="4A">4A</option>
-              <option value="4B">4B</option>
-              <option value="5A">5A</option>
-              <option value="5B">5B</option>
-              <option value="6A">6A</option>
-              <option value="6B">6B</option>
+              <option value="">
+                {loadingKelas ? "-- Memuat Kelas... --" : "-- Pilih Kelas --"}
+              </option>
+              {kelasList.map((kls) => (
+                <option key={kls} value={kls}>
+                  Kelas {kls}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Dropdown Pilih Nama Siswa */}
+          <div>
+            <label className="block text-sm mb-1 text-slate-300 font-medium">
+              Pilih Nama Siswa
+            </label>
+            <select
+              required
+              disabled={!selectedKelas || loadingSiswa}
+              value={selectedSiswaId}
+              onChange={(e) => setSelectedSiswaId(e.target.value)}
+              className="w-full p-3 bg-[#0d1322] border border-[#525EA7]/60 rounded-lg text-[#FFF449] focus:outline-none focus:ring-2 focus:ring-[#5FACD3] disabled:opacity-50"
+            >
+              <option value="">
+                {!selectedKelas
+                  ? "-- Pilih Kelas Terlebih Dahulu --"
+                  : loadingSiswa
+                  ? "-- Memuat Siswa... --"
+                  : "-- Pilih Nama Siswa --"}
+              </option>
+              {siswaList.map((siswa) => (
+                <option key={siswa.id} value={siswa.id}>
+                  {siswa.nama} (NISN: {siswa.nisn || "-"})
+                </option>
+              ))}
             </select>
           </div>
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-[#FFF449] hover:bg-[#F4D35E] text-[#0d1322] font-bold p-3 rounded-lg transition disabled:opacity-50 shadow-md"
+            disabled={!selectedSiswaId}
+            className="w-full bg-[#FFF449] hover:bg-[#F4D35E] text-[#0d1322] font-bold p-3 rounded-lg transition disabled:opacity-50 shadow-md mt-2"
           >
-            {loading ? "Membangun Kartu..." : "Buat & Generate Kartu"}
+            Tampilkan & Cetak Kartu
           </button>
         </form>
       ) : (
         /* Tampilan Preview Kartu & Tombol Download */
         <div className="flex flex-col items-center gap-6">
-          {/* Desain Kartu Absensi Ukuran KTP (Portrait) - Custom Pattern Background */}
           <div
             ref={cardRef}
             className="relative w-[320px] h-[508px] p-5 bg-[#0d1322] border-2 border-[#F4D35E] rounded-2xl shadow-[0_0_35px_rgba(82,94,167,0.45)] flex flex-col items-center justify-between text-center overflow-hidden"
           >
             {/* Layer Background Pattern / Vector Tech Overlay */}
             <div className="absolute inset-0 bg-gradient-to-br from-[#131b2e] via-[#0d1322] to-[#18233c] pointer-events-none" />
-            
+
             {/* Pattern Mesh SVG */}
             <svg
               className="absolute inset-0 w-full h-full opacity-15 pointer-events-none"
@@ -180,7 +224,7 @@ export default function PendaftaranKartuPage() {
               </div>
             </div>
 
-            {/* 2. NAMA & KELAS (DI ATAS QR CODE) */}
+            {/* 2. NAMA & KELAS */}
             <div className="w-full bg-[#131b2e]/85 border border-[#525EA7]/50 rounded-xl py-2 px-3 shadow-md z-10 backdrop-blur-md space-y-0.5">
               <p className="font-black text-lg text-white truncate leading-snug tracking-wide">
                 {studentData.nama}
@@ -190,7 +234,7 @@ export default function PendaftaranKartuPage() {
               </p>
             </div>
 
-            {/* 3. QR CODE (DI TENGAH) */}
+            {/* 3. QR CODE */}
             <div className="relative p-1.5 rounded-2xl bg-gradient-to-tr from-[#525EA7] via-[#5FACD3] to-[#F4D35E] shadow-[0_8px_20px_rgba(0,0,0,0.6)] z-10">
               <div className="bg-white p-2.5 rounded-[12px]">
                 <QRCodeSVG
@@ -209,14 +253,14 @@ export default function PendaftaranKartuPage() {
               </div>
             </div>
 
-            {/* 4. NISN (DI PALING BAWAH, SANGAT AMAN UNTUK KODE PANJANG) */}
+            {/* 4. NISN */}
             <div className="w-full z-10 pb-1">
               <div className="bg-[#090d16]/90 border border-[#525EA7]/60 rounded-lg py-1.5 px-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase font-bold text-[#5FACD3] tracking-wider">
                   NISN
                 </p>
                 <p className="text-xs font-mono font-bold text-white break-all leading-tight mt-0.5">
-                  {studentData.nisn}
+                  {studentData.nisn || "-"}
                 </p>
               </div>
             </div>
@@ -233,13 +277,11 @@ export default function PendaftaranKartuPage() {
             <button
               onClick={() => {
                 setStudentData(null);
-                setNisn("");
-                setNama("");
-                setKelas("");
+                setSelectedSiswaId("");
               }}
               className="bg-[#131b2e] hover:bg-[#18233c] text-slate-300 font-semibold border border-[#525EA7]/50 px-4 py-2.5 rounded-lg transition"
             >
-              Buat Lagi
+              Pilih Siswa Lain
             </button>
           </div>
         </div>

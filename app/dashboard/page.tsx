@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+// 🌟 PENAMBAHAN 1: Import komponen ListAbsensi
+import ListAbsensi from './components/ListAbsensi';
 
 interface DataAbsensi {
   id: number;
@@ -37,6 +39,9 @@ export default function DashboardPage() {
   const [listLogs, setListLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [pesan, setPesan] = useState<{ tipe: 'success' | 'error'; teks: string } | null>(null);
+
+  // 🌟 PENAMBAHAN 2: State refreshTrigger untuk mentrigger auto-update pada ListAbsensi
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   // State Edit Modal
   const [editingItem, setEditingItem] = useState<DataAbsensi | null>(null);
@@ -105,6 +110,9 @@ export default function DashboardPage() {
       setNisn('');
       setNamaSiswa('');
       fetchAbsensi();
+      
+      // 🌟 PENAMBAHAN 3: Trigger update otomatis ke tabel ListAbsensi
+      setRefreshTrigger((prev) => prev + 1);
     }
   };
 
@@ -120,6 +128,9 @@ export default function DashboardPage() {
     } else {
       await logActivity('DELETE', `Menghapus data absensi ID ${item.id} (${item.nama_siswa} - NISN: ${displayIdentifier})`);
       fetchAbsensi();
+
+      // 🌟 PENAMBAHAN 4: Trigger update otomatis ke tabel ListAbsensi
+      setRefreshTrigger((prev) => prev + 1);
     }
   };
 
@@ -139,6 +150,9 @@ export default function DashboardPage() {
       await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NISN: ${editingItem.nisn}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}`);
       setEditingItem(null);
       fetchAbsensi();
+
+      // 🌟 PENAMBAHAN 5: Trigger update otomatis ke tabel ListAbsensi
+      setRefreshTrigger((prev) => prev + 1);
     }
   };
 
@@ -355,6 +369,9 @@ export default function DashboardPage() {
           </div>
 
         </div>
+
+        {/* 🌟 PENAMBAHAN 6: Panggilan Komponen Section 3 (List Absensi Per Kelas) */}
+        <ListAbsensi refreshTrigger={refreshTrigger} />
 
         {/* Log Aktivitas Petugas (Audit Control) - Sembunyi khusus untuk user 'ilham' */}
         {!isIlham && (

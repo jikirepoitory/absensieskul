@@ -18,29 +18,57 @@ export default function ScannerPage() {
     if (!result || !result[0]?.rawValue || !isScanning) return;
 
     const scannedText = result[0].rawValue.trim();
-    setIsScanning(false); // Hentikan scan agar tidak request berulang kali
+    setIsScanning(false); // Hentikan scanner sementara agar tidak request ganda
     setLoading(true);
-    setStatusMessage(`QR Terbaca! Memproses data...`);
+    setStatusMessage("QR Terbaca! Memproses data...");
 
     try {
-      // 1. Cari data siswa berdasarkan ID dari QR Code
-      const { data: siswa, error: errorSiswa } = await supabase
+      // 1. Cari data siswa (Cek NISN dulu, lalu ID, lalu Nama jika QR hanya berisi NISN/Nama)
+      let { data: siswa, error: errorSiswa } = await supabase
         .from("siswa")
         .select("*")
-        .eq("id", scannedText)
-        .single();
+        .or(`nisn.eq.${scannedText},id.eq.${scannedText},nama.eq.${scannedText}`)
+        .maybeSingle();
 
       if (errorSiswa || !siswa) {
-        setStatusMessage("❌ ID Siswa tidak ditemukan di database!");
+        setStatusMessage("❌ Data siswa tidak ditemukan di database!");
         setLoading(false);
         return;
       }
 
-      // 2. Simpan ke tabel absensi (termasuk NISN)
+      // 2. Cek apakah siswa ini sudah absen (Hadir) pada HARI INI
+      const todayDate = new Date().toISOString().split("T")[0];
+      const startOfDay = `${todayDate}T00:00:00.000Z`;
+      const endOfDay = `${todayDate}T23:59:59.999Z`;
+
+      const { data: existingAbsen } = await supabase
+        .from("absensi")
+        .select("id")
+        .eq("nisn", siswa.nisn)
+        .gte("created_at", startOfDay)
+        .lte("created_at", endOfDay)
+        .maybeSingle();
+
+      // Set data siswa ke UI untuk ditampilkan
+      setScannedData({
+        id: siswa.id,
+        nisn: siswa.nisn || "-",
+        nama: siswa.nama,
+        kelas: siswa.kelas,
+      });
+
+      // 3. Jika SUDAH pernah scan hari ini -> Beri Notifikasi & Jangan Insert Baru
+      if (existingAbsen) {
+        setStatusMessage(`⚠️ Siswa ${siswa.nama} sudah terdata HADIR hari ini!`);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Jika BELUM absen -> Insert data baru dengan status Hadir
       const { error: errorAbsen } = await supabase.from("absensi").insert([
         {
           nis: siswa.id,
-          nisn: siswa.nisn, // <--- Ditambahkan ke tabel absensi
+          nisn: siswa.nisn,
           nama_siswa: siswa.nama,
           kelas: siswa.kelas,
           status: "Hadir",
@@ -50,12 +78,7 @@ export default function ScannerPage() {
       if (errorAbsen) {
         setStatusMessage("❌ Gagal mencatat absensi: " + errorAbsen.message);
       } else {
-        setScannedData({
-          id: siswa.id,
-          nisn: siswa.nisn || "-", // <--- Simpan NISN ke state UI
-          nama: siswa.nama,
-          kelas: siswa.kelas,
-        });
+        
         setStatusMessage("✅ ABSENSI BERHASIL DICATAT!");
       }
     } catch (err: any) {
@@ -79,7 +102,7 @@ export default function ScannerPage() {
               onScan={handleScan}
               onError={(error) => console.log(error)}
               styles={{
-                container: { width: "100%", height: "100%" }
+                container: { width: "100%", height: "100%" },
               }}
             />
           )}
@@ -92,9 +115,9 @@ export default function ScannerPage() {
         {/* Info Siswa Ter-scan */}
         {scannedData && (
           <div className="w-full p-4 bg-slate-800 border border-yellow-400/40 rounded-xl text-center space-y-1.5">
-            <p className="text-xs text-slate-400 font-medium">Siswa Hadir:</p>
+            <p className="text-xs text-slate-400 font-medium">Data Siswa:</p>
             <p className="text-lg font-extrabold text-white leading-snug">{scannedData.nama}</p>
-            
+
             <div className="flex justify-center items-center gap-3 text-xs font-semibold pt-1 border-t border-slate-700/60">
               <span className="text-slate-300">
                 NISN: <span className="text-yellow-400 font-bold">{scannedData.nisn}</span>
