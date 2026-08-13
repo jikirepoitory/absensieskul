@@ -13,6 +13,9 @@ export default function ScannerPage() {
     kelas: string;
   } | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(true);
+  
+  // State baru untuk mengatur kamera (environment = belakang, user = depan)
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
@@ -26,7 +29,7 @@ export default function ScannerPage() {
 
         html5QrcodeScanner
           .start(
-            { facingMode: "user" },
+            { facingMode: facingMode }, // Menggunakan state facingMode
             { fps: 10, qrbox: { width: 250, height: 250 } },
             (decodedText) => {
               handleScanSuccess(decodedText);
@@ -48,7 +51,7 @@ export default function ScannerPage() {
         }
       };
     }
-  }, [isScanning]);
+  }, [isScanning, scannedData, facingMode]); // Tambahkan facingMode ke dependency array
 
   const handleScanSuccess = async (scannedText: string) => {
     if (scannerRef.current && scannerRef.current.isScanning) {
@@ -121,7 +124,14 @@ export default function ScannerPage() {
     setIsScanning(true);
   };
 
-  // Tentukan varian hasil (sukses / warning / gagal) berdasarkan isi status
+  // Fungsi untuk menukar kamera
+  const handleToggleCamera = async () => {
+    if (scannerRef.current && scannerRef.current.isScanning) {
+      await scannerRef.current.stop().catch((e) => console.error(e));
+    }
+    setFacingMode((prev) => (prev === "environment" ? "user" : "environment"));
+  };
+
   const getResultVariant = (): "success" | "warning" | "error" => {
     if (statusMessage.includes("✅")) return "success";
     if (statusMessage.includes("⚠️")) return "warning";
@@ -159,7 +169,6 @@ export default function ScannerPage() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 font-sans">
-      {/* Background ambient glow */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-32 -left-24 w-72 h-72 bg-yellow-500/20 rounded-full blur-3xl" />
         <div className="absolute -bottom-32 -right-24 w-72 h-72 bg-indigo-500/20 rounded-full blur-3xl" />
@@ -173,7 +182,6 @@ export default function ScannerPage() {
         />
       </div>
 
-      {/* Header */}
       <div className="relative z-10 flex flex-col items-center mb-6">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center shadow-lg shadow-yellow-500/30">
@@ -202,10 +210,25 @@ export default function ScannerPage() {
         </p>
       </div>
 
-      {/* Card utama */}
       <div className="relative z-10 w-full max-w-sm bg-slate-900/70 backdrop-blur-xl p-5 rounded-3xl border border-slate-800/80 shadow-2xl shadow-black/40 flex flex-col items-center gap-4">
-        {/* Container Kamera / Hasil Scan */}
         <div className="w-full relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-950 min-h-[280px] flex items-center justify-center">
+          
+          {/* Tombol Tukar Kamera Overlay */}
+          {isScanning && !scannedData && !errorMessage && (
+            <button
+              onClick={handleToggleCamera}
+              className="absolute top-3 right-3 z-50 p-2 bg-slate-900/80 border border-slate-700 hover:bg-slate-800 rounded-full text-yellow-400 shadow-lg backdrop-blur-md transition-all active:scale-90"
+              title="Tukar Kamera"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 16v-2a4 4 0 0 0-4-4H5" />
+                <polyline points="8 6 5 10 8 14" />
+                <path d="M3 8v2a4 4 0 0 0 4 4h12" />
+                <polyline points="16 18 19 14 16 10" />
+              </svg>
+            </button>
+          )}
+
           {errorMessage ? (
             <div className="p-6 text-center text-rose-400 text-xs font-semibold space-y-4">
               <div className="w-12 h-12 mx-auto rounded-full bg-rose-500/10 flex items-center justify-center">
@@ -224,7 +247,6 @@ export default function ScannerPage() {
               </button>
             </div>
           ) : !isScanning ? (
-            // ---- HASIL SCAN: tampil begitu kamera berhenti ----
             <div className={`w-full h-full flex flex-col items-center justify-center gap-3 bg-gradient-to-b ${resultStyles.bg} animate-[fadeIn_0.4s_ease-out]`}>
               <style>{`
                 @keyframes fadeIn {
@@ -295,7 +317,6 @@ export default function ScannerPage() {
           )}
         </div>
 
-        {/* Status */}
         <div className="w-full flex items-center justify-center gap-2 px-2">
           {isScanning && !scannedData && !errorMessage && (
             <span className="relative flex h-2.5 w-2.5">
@@ -308,7 +329,6 @@ export default function ScannerPage() {
           </p>
         </div>
 
-        {/* Info Siswa */}
         {scannedData && (
           <div className="w-full p-4 bg-gradient-to-b from-slate-800/80 to-slate-800/40 border border-yellow-400/30 rounded-2xl text-center space-y-2 shadow-inner animate-[fadeIn_0.4s_ease-out]">
             <div className="w-10 h-10 mx-auto rounded-full bg-yellow-400/10 flex items-center justify-center mb-1">
