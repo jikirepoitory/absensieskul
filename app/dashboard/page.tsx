@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [kelasSelected, setKelasSelected] = useState<string>('');
   const [siswaList, setSiswaList] = useState<Siswa[]>([]);
   const [selectedSiswaId, setSelectedSiswaId] = useState<string>('');
+  const [statusAbsen, setStatusAbsen] = useState<'Hadir' | 'Izin'>('Hadir');
   const [tanggalAbsen, setTanggalAbsen] = useState<string>(''); // Tambahan tanggal custom
 
   // State App & Logs
@@ -159,7 +160,7 @@ export default function DashboardPage() {
       nisn: targetSiswa.nisn || '',
       nama_siswa: targetSiswa.nama,
       kelas: kelasSelected,
-      status: 'Hadir',
+      status: statusAbsen,
     };
 
     // Jika user memilih tanggal khusus (Manual Absen Backdate/Future)
@@ -179,14 +180,14 @@ export default function DashboardPage() {
     } else {
       setPesan({
         tipe: 'success',
-        teks: `Berhasil absensi: ${targetSiswa.nama} (${kelasSelected}) ${
+        teks: `Berhasil absensi (${statusAbsen}): ${targetSiswa.nama} (${kelasSelected}) ${
           tanggalAbsen ? `pada tanggal ${tanggalAbsen}` : ''
         }`,
       });
 
       await logActivity(
         'ADD_ABSEN',
-        `Menambahkan absensi NISN: ${targetSiswa.nisn}, Nama: ${targetSiswa.nama}, Kelas: ${kelasSelected} ${
+        `Menambahkan absensi [${statusAbsen}] NISN: ${targetSiswa.nisn}, Nama: ${targetSiswa.nama}, Kelas: ${kelasSelected} ${
           tanggalAbsen ? `(Manual Tanggal: ${tanggalAbsen})` : ''
         }`
       );
@@ -222,13 +223,18 @@ export default function DashboardPage() {
 
     const { error } = await supabase
       .from('absensi')
-      .update({ nama_siswa: editingItem.nama_siswa, nisn: editingItem.nisn, kelas: editingItem.kelas })
+      .update({
+        nama_siswa: editingItem.nama_siswa,
+        nisn: editingItem.nisn,
+        kelas: editingItem.kelas,
+        status: editingItem.status || 'Hadir',
+      })
       .eq('id', editingItem.id);
 
     if (error) {
       alert('Gagal update data: ' + error.message);
     } else {
-      await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NISN: ${editingItem.nisn}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}`);
+      await logActivity('EDIT', `Mengedit data ID ${editingItem.id} menjadi NISN: ${editingItem.nisn}, Nama: ${editingItem.nama_siswa}, Kelas: ${editingItem.kelas}, Status: ${editingItem.status}`);
       setEditingItem(null);
       fetchAbsensi();
       setRefreshTrigger((prev) => prev + 1);
@@ -248,7 +254,7 @@ export default function DashboardPage() {
     const sortedData = [...listAbsensi].sort((a, b) => a.kelas.localeCompare(b.kelas));
     const headers = ['ID,Waktu,NISN,Nama Siswa,Kelas,Status\n'];
     const rows = sortedData.map(
-      (item) => `${item.id},"${new Date(item.created_at).toLocaleString('id-ID')}","${item.nisn || item.nis || '-'}","${item.nama_siswa}","${item.kelas}","${item.status}"\n`
+      (item) => `${item.id},"${new Date(item.created_at).toLocaleString('id-ID')}","${item.nisn || item.nis || '-'}","${item.nama_siswa}","${item.kelas}","${item.status || 'Hadir'}"\n`
     );
 
     const blob = new Blob([...headers, ...rows], { type: 'text/csv;charset=utf-8;' });
@@ -364,6 +370,39 @@ export default function DashboardPage() {
                 </select>
               </div>
 
+              {/* Pilihan Status (Hadir / Izin) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                  Status Kehadiran
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStatusAbsen('Hadir')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition flex items-center justify-center gap-1.5 ${
+                      statusAbsen === 'Hadir'
+                        ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>✅</span>
+                    <span>Hadir</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusAbsen('Izin')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition flex items-center justify-center gap-1.5 ${
+                      statusAbsen === 'Izin'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>📝</span>
+                    <span>Izin</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Input Tanggal (Opsional untuk Absen Manual Hari Lain) */}
               <div className="pt-2 border-t border-slate-100">
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -426,13 +465,14 @@ export default function DashboardPage() {
                     <th className="p-2">Waktu / Tgl</th>
                     <th className="p-2">Siswa</th>
                     <th className="p-2">Kelas</th>
+                    <th className="p-2 text-center">Status</th>
                     <th className="p-2 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredAbsensi.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-4 text-center text-slate-400">
+                      <td colSpan={5} className="p-4 text-center text-slate-400">
                         {filterKelas === 'SEMUA' ? 'Belum ada data absensi.' : `Belum ada data untuk ${filterKelas}.`}
                       </td>
                     </tr>
@@ -456,6 +496,17 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td className="p-2 font-semibold text-slate-700">{item.kelas}</td>
+                        <td className="p-2 text-center">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 text-xs font-bold rounded-full border ${
+                              item.status === 'Izin'
+                                ? 'bg-amber-100 text-amber-700 border-amber-200'
+                                : 'bg-green-100 text-green-700 border-green-200'
+                            }`}
+                          >
+                            {item.status || 'Hadir'}
+                          </span>
+                        </td>
                         <td className="p-2 text-center space-x-1">
                           <button
                             onClick={() => setEditingItem(item)}
@@ -571,6 +622,17 @@ export default function DashboardPage() {
                       Kelas {kls}
                     </option>
                   ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-slate-600 block mb-1">Status Kehadiran</label>
+                <select
+                  value={editingItem.status || 'Hadir'}
+                  onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
+                  className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-slate-50"
+                >
+                  <option value="Hadir">Hadir</option>
+                  <option value="Izin">Izin</option>
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">

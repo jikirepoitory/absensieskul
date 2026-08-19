@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function Kelas4KuisPage() {
@@ -7,7 +7,7 @@ export default function Kelas4KuisPage() {
   const [kodePertemuan, setKodePertemuan] = useState<number>(1);
   const [selectedPart, setSelectedPart] = useState<number>(1);
   const [daftarSiswa, setDaftarSiswa] = useState<any[]>([]);
-  const [selectedSiswa, setSelectedSiswa] = useState<string>("");
+  const [selectedSiswa, setSelectedSiswa] = useState<string>("" );
 
   // Track daftar Part yang sudah diselesaikan oleh siswa yang dipilih
   const [completedParts, setCompletedParts] = useState<number[]>([]);
@@ -24,6 +24,8 @@ export default function Kelas4KuisPage() {
 
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [finalDuration, setFinalDuration] = useState<number>(0);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Get data siswa saat subKelas berubah
   useEffect(() => {
@@ -47,6 +49,15 @@ export default function Kelas4KuisPage() {
     }
     return () => clearInterval(interval);
   }, [isStarted, isCompleted, startTime]);
+
+  // Auto-focus dan posisikan kursor di textarea saat soal aktif
+  useEffect(() => {
+    if (isStarted && !isCompleted && textareaRef.current) {
+      textareaRef.current.focus();
+      const len = textareaRef.current.value.length;
+      textareaRef.current.setSelectionRange(len, len);
+    }
+  }, [currentIndex, isStarted, isCompleted]);
 
   const fetchSiswaByKelas = async (kelasParam: string) => {
     const { data } = await supabase
@@ -118,8 +129,8 @@ export default function Kelas4KuisPage() {
   };
 
   // Validasi per soal sebelum lanjut
-  const handleNextSoal = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleNextSoal = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const currentSoal = soalList[currentIndex];
 
     if (userInputValue.trim() !== currentSoal.kalimat_benar.trim()) {
@@ -253,39 +264,40 @@ export default function Kelas4KuisPage() {
             {confettiEmojis[i % confettiEmojis.length]}
           </span>
         ))}
+        <BackgroundDecor />
 
-        <div className="relative bg-white/90 backdrop-blur border-4 border-yellow-300 p-8 rounded-[2rem] text-center space-y-6 max-w-md w-full shadow-2xl animate-pop-in">
-          <div className="space-y-2">
-            <span className="text-6xl block animate-bounce-slow">🏆</span>
-            <h2 className="text-3xl font-display font-extrabold text-fuchsia-600 drop-shadow-sm">
-              Hebat, Kamu Selesai!
-            </h2>
-            <p className="text-sm text-indigo-500 font-bold">
-              Pertemuan {kodePertemuan} - Part {selectedPart} • {selectedSiswa} ({subKelas})
+        <div className="relative w-full max-w-md bg-white/95 backdrop-blur border-4 border-white shadow-2xl p-6 rounded-[2rem] text-center space-y-5 animate-pop-in">
+          <div className="space-y-1">
+            <span className="text-6xl animate-bounce-slow inline-block">🏆</span>
+            <h1 className="text-2xl font-display font-extrabold text-violet-700">
+              Hebat Sekali, {selectedSiswa}!
+            </h1>
+            <p className="text-xs text-slate-500 font-bold">
+              Kamu berhasil menyelesaikan Part {selectedPart}!
             </p>
           </div>
 
-          <div className="bg-gradient-to-r from-emerald-300 via-teal-300 to-sky-300 border-4 border-white p-5 rounded-2xl space-y-1 shadow-inner">
-            <p className="text-xs text-emerald-900 uppercase font-extrabold tracking-wide">
-              ⏱️ Waktu Pengerjaan Kamu
-            </p>
-            <p className="text-4xl font-display font-black text-emerald-900">
+          <div className="bg-gradient-to-br from-amber-50 to-yellow-100 border-2 border-amber-300 p-4 rounded-2xl space-y-1 shadow-inner">
+            <span className="text-xs text-amber-600 font-extrabold uppercase tracking-wider block">
+              ⏱️ Waktu Pengerjaan
+            </span>
+            <span className="text-3xl font-display font-black text-amber-700 block">
               {formatWaktu(finalDuration)}
-            </p>
+            </span>
           </div>
 
-          <div className="space-y-3 pt-2">
+          <div className="space-y-2 pt-2">
             <button
               onClick={handleUlangiTes}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 active:scale-95 text-slate-900 font-display font-extrabold py-3.5 rounded-2xl transition text-base shadow-[0_5px_0_0_#ca8a04] hover:shadow-[0_3px_0_0_#ca8a04] hover:translate-y-0.5"
+              className="w-full bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 active:scale-95 text-amber-950 font-display font-extrabold py-3.5 rounded-2xl transition shadow-[0_4px_0_0_#b45309] hover:shadow-[0_2px_0_0_#b45309] hover:translate-y-0.5 text-sm"
             >
-              🔄 Ulangi Part Ini
+              🔄 Coba Ulangi Part Ini
             </button>
             <button
               onClick={handleGantiSiswa}
-              className="w-full bg-white hover:bg-slate-50 active:scale-95 text-indigo-600 font-display font-extrabold py-3.5 rounded-2xl transition text-base border-4 border-indigo-200 shadow-[0_5px_0_0_#c7d2fe] hover:shadow-[0_3px_0_0_#c7d2fe] hover:translate-y-0.5"
+              className="w-full bg-white hover:bg-slate-50 text-indigo-600 border-2 border-indigo-200 font-display font-extrabold py-3.5 rounded-2xl transition active:scale-95 text-sm"
             >
-              👤 Kembali ke Menu Utama
+              🏠 Ganti Siswa / Part Lain
             </button>
           </div>
         </div>
@@ -293,8 +305,9 @@ export default function Kelas4KuisPage() {
     );
   }
 
+  // Tampilan Utama (Pilih Siswa / Mengerjakan Soal)
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-sky-100 via-violet-50 to-amber-50 flex flex-col items-center justify-center p-4 font-body">
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-violet-200 via-sky-100 to-amber-100 flex items-center justify-center p-4 font-body">
       <GlobalStyle />
       <BackgroundDecor />
 
@@ -436,7 +449,7 @@ export default function Kelas4KuisPage() {
               <label className="text-xs text-fuchsia-500 flex items-center gap-1.5 font-extrabold uppercase tracking-wide px-1">
                 <span className="text-lg">📋</span> Soal
               </label>
-              <div className="bg-gradient-to-br from-fuchsia-50 to-violet-50 border-2 border-fuchsia-200 rounded-xl p-3.5">
+              <div className="bg-gradient-to-br from-fuchsia-50 to-violet-50 border-2 border-fuchsia-200 rounded-xl p-3.5 select-none">
                 <p className="text-lg leading-relaxed text-violet-700 font-mono font-bold tracking-wide break-words whitespace-pre-wrap">
                   {soalList[currentIndex]?.kalimat_acak}
                 </p>
@@ -445,21 +458,46 @@ export default function Kelas4KuisPage() {
 
             {/* Area Pengerjaan */}
             <div className="space-y-3 bg-sky-50 border-2 border-dashed border-sky-300 rounded-2xl p-4">
-              <label className="text-xs text-sky-600 flex items-center gap-1.5 font-bold">
-                <span className="text-lg">👉</span> Gunakan tombol panah / keyboard untuk memperbaiki teks berikut:
-              </label>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <label className="text-xs text-sky-600 flex items-center gap-1.5 font-bold">
+                  <span className="text-lg">👉</span> Perbaiki teks berikut:
+                </label>
+                <span className="text-[10px] text-sky-700 font-bold bg-sky-200/70 border border-sky-300 px-2 py-0.5 rounded-full inline-flex items-center gap-1 self-start sm:self-auto">
+                  🔒 Mouse Terkunci • Pakai Panah ⬅️➡️
+                </span>
+              </div>
 
               <textarea
+                ref={textareaRef}
                 value={userInputValue}
                 onChange={(e) => {
                   setUserInputValue(e.target.value);
                   setInputError(false);
                 }}
+                onMouseDown={(e) => {
+                  // Cegah klik mouse mengubah posisi kursor
+                  e.preventDefault();
+                  textareaRef.current?.focus();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  textareaRef.current?.focus();
+                }}
+                onKeyDown={(e) => {
+                  // Tekan Enter untuk submit langsung tanpa perlu klik tombol mouse
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleNextSoal();
+                  }
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+                onDragStart={(e) => e.preventDefault()}
+                onDrop={(e) => e.preventDefault()}
                 autoFocus
                 rows={3}
                 wrap="soft"
                 spellCheck={false}
-                className={`w-full min-h-[6.5rem] bg-white border-[3px] resize-none ${
+                className={`w-full min-h-[6.5rem] bg-white border-[3px] resize-none cursor-default ${
                   inputError
                     ? "border-rose-400 ring-4 ring-rose-100 animate-shake"
                     : "border-indigo-200 focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
@@ -479,7 +517,7 @@ export default function Kelas4KuisPage() {
             >
               {currentIndex + 1 === soalList.length
                 ? "🏁 Selesaikan Kuis!"
-                : "✅ Lanjut Soal Berikutnya"}
+                : "✅ Lanjut Soal Berikutnya (Enter)"}
             </button>
           </form>
         )}

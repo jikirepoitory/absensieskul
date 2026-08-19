@@ -18,7 +18,7 @@ interface Absensi {
 }
 
 interface RekapSiswa extends Siswa {
-  status: "Hadir" | "Tidak Hadir";
+  status: "Hadir" | "Tidak Hadir" | "Izin";
   waktuScan?: string;
   absensiId?: number;
 }
@@ -90,16 +90,24 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
         absensiMap.set(item.nisn, {
           id: item.id,
           waktu: item.created_at,
-          status: item.status,
+          status: item.status || "Hadir",
         });
       });
     }
 
     const combinedData: RekapSiswa[] = ((siswaData as Siswa[]) || []).map((siswa: Siswa) => {
       const dataAbsen = absensiMap.get(siswa.nisn);
+      const rawStatus = dataAbsen?.status;
+      const computedStatus: "Hadir" | "Tidak Hadir" | "Izin" =
+        rawStatus === "Izin"
+          ? "Izin"
+          : dataAbsen
+          ? "Hadir"
+          : "Tidak Hadir";
+
       return {
         ...siswa,
-        status: dataAbsen ? "Hadir" : "Tidak Hadir",
+        status: computedStatus,
         absensiId: dataAbsen?.id,
         waktuScan: dataAbsen?.waktu
           ? new Date(dataAbsen.waktu).toLocaleTimeString("id-ID", {
@@ -118,27 +126,45 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
     fetchRekapAbsensi();
   }, [fetchRekapAbsensi, refreshTrigger]);
 
-  // Toggle Status
-  const handleToggleStatus = async (siswa: RekapSiswa) => {
+  // Update Status Absensi (Hadir / Izin / Tidak Hadir)
+  const handleChangeStatus = async (
+    siswa: RekapSiswa,
+    newStatus: "Hadir" | "Izin" | "Tidak Hadir"
+  ) => {
+    if (siswa.status === newStatus) return;
     setActionLoading(siswa.id);
-    if (siswa.status === "Hadir") {
-      if (siswa.absensiId) {
-        const { error } = await supabase.from("absensi").delete().eq("id", siswa.absensiId);
+
+    try {
+      if (newStatus === "Tidak Hadir") {
+        if (siswa.absensiId) {
+          const { error } = await supabase.from("absensi").delete().eq("id", siswa.absensiId);
+          if (error) alert("Gagal mengubah status: " + error.message);
+        }
+      } else if (siswa.absensiId) {
+        // Update data absensi yang sudah ada
+        const { error } = await supabase
+          .from("absensi")
+          .update({ status: newStatus })
+          .eq("id", siswa.absensiId);
+        if (error) alert("Gagal mengubah status: " + error.message);
+      } else {
+        // Buat data absensi baru
+        const customTimestamp = `${selectedDate}T${new Date().toISOString().split("T")[1]}`;
+        const { error } = await supabase.from("absensi").insert([
+          {
+            nisn: siswa.nisn,
+            nama_siswa: siswa.nama,
+            kelas: siswa.kelas,
+            status: newStatus,
+            created_at: customTimestamp,
+          },
+        ]);
         if (error) alert("Gagal mengubah status: " + error.message);
       }
-    } else {
-      const customTimestamp = `${selectedDate}T${new Date().toISOString().split("T")[1]}`;
-      const { error } = await supabase.from("absensi").insert([
-        {
-          nisn: siswa.nisn,
-          nama_siswa: siswa.nama,
-          kelas: siswa.kelas,
-          status: "Hadir",
-          created_at: customTimestamp,
-        },
-      ]);
-      if (error) alert("Gagal mengubah status: " + error.message);
+    } catch (err: any) {
+      alert("Terjadi kesalahan: " + err.message);
     }
+
     setActionLoading(null);
     fetchRekapAbsensi();
   };
@@ -213,7 +239,7 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
     setSelectedDatesForExport(selectedDatesForExport.filter((d) => d !== dateToRemove));
   };
 
-  // 🌟 FITUR TERBARU: PROSES GENERATE & DOWNLOAD EXCEL/CSV BERDASARKAN TANGGAL KRONOLOGIS
+  // 🌟 PROSES GENERATE & DOWNLOAD EXCEL/CSV BERDASARKAN TANGGAL KRONOLOGIS
   const handleExecuteDownloadCSV = async () => {
     if (selectedDatesForExport.length === 0) {
       alert("Pilih minimal 1 tanggal pertemuan!");
@@ -252,15 +278,12 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
         .lte("created_at", maxDate);
 
       // Mapping status kehadiran per NISN dan per Tanggal (YYYY-MM-DD)
-      const absensiMatrix = new Map<string, Set<string>>();
+      const absensiMatrix = new Map<string, string>();
       if (absensiList) {
         absensiList.forEach((item) => {
           const dateStr = new Date(item.created_at).toISOString().slice(0, 10);
           const key = `${item.nisn}_${dateStr}`;
-          if (!absensiMatrix.has(key)) {
-            absensiMatrix.set(key, new Set());
-          }
-          absensiMatrix.get(key)?.add(item.status);
+          absensiMatrix.set(key, item.status || "Hadir");
         });
       }
 
@@ -271,24 +294,30 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
         return `"Pertemuan (${dd}/${mm}/${yyyy})"`;
       });
 
-      let csvContent = `No,NISN,"Nama Siswa",Kelas,${formattedHeaderDates.join(",")},"Total Hadir"\n`;
+      let csvContent = `No,NISN,"Nama Siswa",Kelas,${formattedHeaderDates.join(",")},"Total Hadir","Total Izin","Total Tidak Hadir"\n`;
 
       // 5. SUSUN BARIS DATA SISWA
       siswaList.forEach((siswa, index) => {
         let totalHadirCount = 0;
+        let totalIzinCount = 0;
+        let totalTidakHadirCount = 0;
 
         const rowStatuses = sortedDates.map((dateStr) => {
           const key = `${siswa.nisn}_${dateStr}`;
-          const isHadir = absensiMatrix.has(key);
-          if (isHadir) {
+          const statusValue = absensiMatrix.get(key);
+          if (statusValue === "Izin") {
+            totalIzinCount++;
+            return `"Izin"`;
+          } else if (statusValue === "Hadir" || statusValue) {
             totalHadirCount++;
             return `"Hadir"`;
           } else {
+            totalTidakHadirCount++;
             return `"Tidak Hadir"`;
           }
         });
 
-        csvContent += `${index + 1},"${siswa.nisn}","${siswa.nama}","${siswa.kelas}",${rowStatuses.join(",")},${totalHadirCount}\n`;
+        csvContent += `${index + 1},"${siswa.nisn}","${siswa.nama}","${siswa.kelas}",${rowStatuses.join(",")},${totalHadirCount},${totalIzinCount},${totalTidakHadirCount}\n`;
       });
 
       // 6. TRIGGER DOWNLOAD CSV
@@ -314,7 +343,8 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
   };
 
   const totalHadir = listData.filter((s) => s.status === "Hadir").length;
-  const totalTidakHadir = listData.length - totalHadir;
+  const totalIzin = listData.filter((s) => s.status === "Izin").length;
+  const totalTidakHadir = listData.filter((s) => s.status === "Tidak Hadir").length;
 
   return (
     <div className="p-6 bg-white rounded-xl shadow-md space-y-6 border border-slate-200">
@@ -350,7 +380,6 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
           {/* 🌟 TOMBOL DOWNLOAD LAPORAN REKAP PERBULAN / MULTI-PERTEMUAN */}
           <button
             onClick={() => {
-              // Set default 1 tanggal yang sedang aktif
               if (selectedDatesForExport.length === 0) {
                 setSelectedDatesForExport([selectedDate]);
               }
@@ -365,7 +394,7 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
       </div>
 
       {/* Ringkasan Ringkas */}
-      <div className="grid grid-cols-3 gap-4 text-center">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
         <div className="p-3 bg-gray-50 rounded-lg border">
           <p className="text-xs text-gray-500 font-semibold">TOTAL SISWA</p>
           <p className="text-lg font-bold text-gray-800">{listData.length}</p>
@@ -373,6 +402,10 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
         <div className="p-3 bg-green-50 rounded-lg border border-green-200">
           <p className="text-xs text-green-600 font-semibold">HADIR</p>
           <p className="text-lg font-bold text-green-700">{totalHadir}</p>
+        </div>
+        <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+          <p className="text-xs text-amber-600 font-semibold">IZIN</p>
+          <p className="text-lg font-bold text-amber-700">{totalIzin}</p>
         </div>
         <div className="p-3 bg-red-50 rounded-lg border border-red-200">
           <p className="text-xs text-red-600 font-semibold">TIDAK HADIR</p>
@@ -420,8 +453,10 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
                     <span
                       className={`inline-block px-3 py-1 text-xs font-bold rounded-full ${
                         siswa.status === "Hadir"
-                          ? "bg-green-100 text-green-700"
-                          : "bg-red-100 text-red-700"
+                          ? "bg-green-100 text-green-700 border border-green-200"
+                          : siswa.status === "Izin"
+                          ? "bg-amber-100 text-amber-700 border border-amber-200"
+                          : "bg-red-100 text-red-700 border border-red-200"
                       }`}
                     >
                       {siswa.status}
@@ -430,21 +465,32 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
 
                   {/* Kolom Aksi Edit Status */}
                   <td className="py-3 px-4 text-center">
-                    <button
-                      disabled={actionLoading === siswa.id}
-                      onClick={() => handleToggleStatus(siswa)}
-                      className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                        siswa.status === "Hadir"
-                          ? "bg-amber-100 hover:bg-amber-200 text-amber-800"
-                          : "bg-blue-100 hover:bg-blue-200 text-blue-800"
-                      } disabled:opacity-50`}
-                    >
-                      {actionLoading === siswa.id
-                        ? "..."
-                        : siswa.status === "Hadir"
-                        ? "Ubah Ke Tidak Hadir"
-                        : "Ubah Ke Hadir"}
-                    </button>
+                    <div className="inline-flex items-center gap-1">
+                      <select
+                        disabled={actionLoading === siswa.id}
+                        value={siswa.status}
+                        onChange={(e) =>
+                          handleChangeStatus(
+                            siswa,
+                            e.target.value as "Hadir" | "Izin" | "Tidak Hadir"
+                          )
+                        }
+                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition cursor-pointer focus:outline-none focus:ring-2 disabled:opacity-50 ${
+                          siswa.status === "Hadir"
+                            ? "bg-green-50 border-green-300 text-green-800 focus:ring-green-400"
+                            : siswa.status === "Izin"
+                            ? "bg-amber-50 border-amber-300 text-amber-800 focus:ring-amber-400"
+                            : "bg-red-50 border-red-300 text-red-800 focus:ring-red-400"
+                        }`}
+                      >
+                        <option value="Hadir">✅ Hadir</option>
+                        <option value="Izin">📝 Izin</option>
+                        <option value="Tidak Hadir">❌ Tidak Hadir</option>
+                      </select>
+                      {actionLoading === siswa.id && (
+                        <span className="text-[10px] text-slate-400 animate-pulse">...</span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Kolom ! untuk Hapus Siswa Permanen */}
@@ -553,7 +599,7 @@ export default function ListAbsensi({ refreshTrigger }: ListAbsensiProps) {
         </div>
       )}
 
-      {/* 🌟 POP-UP MODAL 2: PILIH BEBERAPA TANGGAL LAPORAN REKAP (BEBAS / 4 PERTEMUAN) */}
+      {/* 🌟 POP-UP MODAL 2: PILIH BEBERAPA TANGGAL LAPORAN REKAP */}
       {showDownloadModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-lg space-y-4">
